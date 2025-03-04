@@ -1,5 +1,6 @@
 const { getAllFilePathsWithExtension, readFile } = require('./fileSystem');
 const { readLine } = require('./console');
+const path = require('path');
 
 const files = getFiles();
 
@@ -8,41 +9,33 @@ readLine(processCommand);
 
 function getFiles() {
     const filePaths = getAllFilePathsWithExtension(process.cwd(), 'js');
-    return filePaths.map(path => ({
-        path: path,
-        content: readFile(path)
+    return filePaths.map(filePath => ({
+        path: filePath,
+        content: readFile(filePath),
+        filename: path.basename(filePath)
     }));
 }
 
 function processCommand(command) {
     const [cmd, ...args] = command.split(' ');
-    switch (cmd) {
+    switch (cmd.toLowerCase()) {
         case 'exit':
             process.exit(0);
             break;
         case 'show':
-            if (args[0] === 'todos') {
-                showTodos();
-            } else {
-                console.log('wrong command');
-            }
+            args[0] === 'todos' ? showTodos() : console.log('wrong command');
             break;
         case 'important':
             showImportantTodos();
             break;
         case 'user':
-            if (args.length > 0) {
-                showUserTodos(args[0]);
-            } else {
-                console.log('Please specify a username.');
-            }
+            args.length > 0 ? showUserTodos(args[0]) : console.log('Please specify a username.');
             break;
         case 'sort':
-            if (args.length > 0) {
-                sortTodos(args[0]);
-            } else {
-                console.log('Please specify a sorting criteria: importance, user, or date.');
-            }
+            args.length > 0 ? sortTodos(args[0]) : console.log('Please specify sorting criteria: importance, user, date.');
+            break;
+        case 'date':
+            args.length > 0 ? showDateTodos(args[0]) : console.log('Please specify a date.');
             break;
         default:
             console.log('wrong command');
@@ -50,150 +43,141 @@ function processCommand(command) {
     }
 }
 
-function showTodos() {
-    const todos = extractTodos();
-    if (todos.length === 0) {
-        console.log('No TODOs found.');
-    } else {
-        console.log('TODOs found:');
-        printTodos(todos);
-    }
-}
-
-function showImportantTodos() {
-    const todos = extractTodos().filter(todo => todo.comment.includes('!'));
-    if (todos.length === 0) {
-        console.log('No important TODOs found.');
-    } else {
-        console.log('Important TODOs found:');
-        printTodos(todos);
-    }
-}
-
-function showUserTodos(username) {
-    const todos = extractTodos().filter(todo => todo.author === username);
-    if (todos.length === 0) {
-        console.log(`No TODOs found for user "${username}".`);
-    } else {
-        console.log(`TODOs for user "${username}":`);
-        printTodos(todos);
-    }
-}
-
-function sortTodos(criteria) {
-    const todos = extractTodos();
-    let sortedTodos;
-
-    switch (criteria) {
-        case 'importance':
-            sortedTodos = sortByImportance(todos);
-            break;
-        case 'user':
-            sortedTodos = sortByUser(todos);
-            break;
-        case 'date':
-            sortedTodos = sortByDate(todos);
-            break;
-        default:
-            console.log('Invalid sorting criteria. Use: importance, user, or date.');
-            return;
-    }
-
-    console.log(`TODOs sorted by ${criteria}:`);
-    printTodos(sortedTodos);
-}
-
-function sortByImportance(todos) {
-    return todos.sort((a, b) => {
-        const aPriority = (a.comment.match(/!/g) || []).length;
-        const bPriority = (b.comment.match(/!/g) || []).length;
-        if (aPriority === bPriority) {
-            return 0;
-        }
-        return bPriority - aPriority;
-    });
-}
-
-function sortByUser(todos) {
-    return todos.sort((a, b) => {
-        if (a.author && b.author) {
-            return a.author.localeCompare(b.author);
-        } else if (a.author) {
-            return -1;
-        } else if (b.author) {
-            return 1;
-        } else {
-            return 0;
-        }
-    });
-}
-
-function sortByDate(todos) {
-    return todos.sort((a, b) => {
-        if (a.date && b.date) {
-            return new Date(b.date) - new Date(a.date);
-        } else if (a.date) {
-            return -1;
-        } else if (b.date) {
-            return 1;
-        } else {
-            return 0;
-        }
-    });
-}
-
+// ================== TODO Processing ==================
 function extractTodos() {
     const todos = [];
     files.forEach(file => {
-        const lines = file.content.split('\n');
-        lines.forEach((line, index) => {
-            if (line.trim().startsWith('// TODO')) {
-                const comment = line.trim().substring(7).trim();
-                const todo = parseTodo(comment, file.path, index + 1);
-                todos.push(todo);
+        file.content.split('\n').forEach((line, lineNumber) => {
+            const match = line.match(/^\s*\/\/\s*todo[\s:]*?(.*)/i);
+            if (match) {
+                const comment = match[1].trim();
+                if (comment) todos.push(parseTodo(comment, file, lineNumber + 1));
             }
         });
     });
     return todos;
 }
 
-function parseTodo(comment, filePath, lineNumber) {
-    const parts = comment.split(';');
-    if (parts.length >= 3) {
-        const author = parts[0].trim();
-        const date = parts[1].trim();
-        const text = parts.slice(2).join(';').trim();
-        return {
-            file: filePath,
-            lineNumber: lineNumber,
-            author: author,
-            date: date,
-            comment: text,
-            important: text.includes('!')
-        };
-    } else {
-        return {
-            file: filePath,
-            lineNumber: lineNumber,
-            author: null,
-            date: null,
-            comment: comment,
-            important: comment.includes('!')
-        };
-    }
+function parseTodo(comment, file, lineNumber) {
+    const parts = comment.split(';').map(p => p.trim());
+    const hasMetadata = parts.length >= 3 && isValidDate(parts[1]);
+    
+    return {
+        file: file.path,
+        filename: file.filename,
+        lineNumber: lineNumber,
+        author: hasMetadata ? parts[0] : null,
+        date: hasMetadata ? parts[1] : null,
+        dateObj: hasMetadata ? parseDate(parts[1]) : null,
+        comment: hasMetadata ? parts.slice(2).join('; ') : comment,
+        important: comment.includes('!')
+    };
 }
 
-function printTodos(todos) {
+// ================== Command Handlers ==================
+function showTodos() {
+    const todos = extractTodos();
+    todos.length > 0 ? printTable(todos) : console.log('No TODOs found.');
+}
+
+function showImportantTodos() {
+    const todos = extractTodos().filter(todo => todo.important);
+    todos.length > 0 ? printTable(todos) : console.log('No important TODOs found.');
+}
+
+function showUserTodos(username) {
+    const todos = extractTodos().filter(todo => todo.author?.toLowerCase() === username.toLowerCase());
+    todos.length > 0 ? printTable(todos) : console.log(`No TODOs found for user "${username}".`);
+}
+
+function sortTodos(criteria) {
+    const sorters = {
+        importance: (a, b) => (b.comment.match(/!/g) || []).length - (a.comment.match(/!/g) || []).length,
+        user: (a, b) => (a.author || '').localeCompare(b.author || ''),
+        date: (a, b) => (b.dateObj || 0) - (a.dateObj || 0)
+    };
+    
+    const sorted = extractTodos().sort(sorters[criteria] || (() => 0));
+    sorted.length > 0 ? printTable(sorted) : console.log('No TODOs to sort.');
+}
+
+function showDateTodos(dateStr) {
+    const targetDate = parseInputDate(dateStr);
+    if (!targetDate) return console.log('Invalid date format. Use YYYY[-MM[-DD]]');
+    
+    const todos = extractTodos().filter(todo => 
+        todo.dateObj && todo.dateObj >= targetDate
+    );
+    todos.length > 0 ? printTable(todos) : console.log(`No TODOs found after ${dateStr}.`);
+}
+
+// ================== Table Formatting ==================
+function printTable(todos) {
+    const columns = calculateColumns(todos);
+    const header = buildRow(columns, ['!', 'user', 'date', 'comment', 'file']);
+    const separator = '-'.repeat(header.length);
+
+    console.log(header);
+    console.log(separator);
     todos.forEach(todo => {
-        const authorInfo = todo.author ? `Author: ${todo.author}` : 'No author';
-        const dateInfo = todo.date ? `Date: ${todo.date}` : 'No date';
-        const priority = (todo.comment.match(/!/g) || []).length;
-        console.log(`File: ${todo.file}, Line: ${todo.lineNumber}, ${authorInfo}, ${dateInfo}, Priority: ${priority}, Comment: ${todo.comment}`);
+        const row = buildRow(columns, [
+            todo.important ? '!' : '',
+            todo.author || '',
+            todo.date || '',
+            todo.comment,
+            todo.filename
+        ]);
+        console.log(row);
     });
+    console.log(separator);
 }
 
-// Примеры комментариев:
-// TODO user1; 2023-10-01; Fix this critical issue!!!
-// TODO user2; 2023-09-15; Improve the code quality!
-// TODO user3; 2023-08-10; Refactor the code
-// TODO This is a simple TODO without author or date.
+function calculateColumns(todos) {
+    const maxWidths = {
+        '!': 1,
+        'user': 10,
+        'date': 10,
+        'comment': 50,
+        'file': 20
+    };
+
+    return ['!', 'user', 'date', 'comment', 'file'].reduce((cols, col) => {
+        const contentLengths = todos.map(todo => 
+            col === '!' ? (todo.important ? 1 : 0)
+            : col === 'file' ? todo.filename.length
+            : todo[col]?.length || 0
+        );
+        cols[col] = Math.min(
+            Math.max(...contentLengths, col.length),
+            maxWidths[col]
+        );
+        return cols;
+    }, {});
+}
+
+function buildRow(columns, data) {
+    return Object.keys(columns).map((col, i) => {
+        const text = data[i] || '';
+        return text.padEnd(columns[col]).slice(0, columns[col]);
+    }).join(' | ');
+}
+
+// ================== Date Utilities ==================
+function parseInputDate(dateStr) {
+    const parts = dateStr.split('-');
+    if (!/^\d{4}(-\d{2}(-\d{2})?)?$/.test(dateStr)) return null;
+    
+    const year = parts[0];
+    const month = parts[1] || '01';
+    const day = parts[2] || '01';
+    return new Date(`${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`);
+}
+
+function isValidDate(dateStr) {
+    return !isNaN(parseDate(dateStr)?.getTime());
+}
+
+function parseDate(dateStr) {
+    const [year, month = '01', day = '01'] = dateStr.split('-');
+    return new Date(`${year}-${month}-${day}`);
+}
