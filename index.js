@@ -1,5 +1,5 @@
-const { getAllFilePathsWithExtension, readFile } = require('./fileSystem');
-const { readLine } = require('./console');
+const {getAllFilePathsWithExtension, readFile} = require('./fileSystem');
+const {readLine} = require('./console');
 const path = require('path');
 
 const files = getFiles();
@@ -23,7 +23,7 @@ function processCommand(command) {
             process.exit(0);
             break;
         case 'show':
-            args[0] === 'todos' ? showTodos() : console.log('wrong command');
+            showTodos()
             break;
         case 'important':
             showImportantTodos();
@@ -43,12 +43,11 @@ function processCommand(command) {
     }
 }
 
-// ================== TODO Processing ==================
 function extractTodos() {
     const todos = [];
     files.forEach(file => {
         file.content.split('\n').forEach((line, lineNumber) => {
-            const match = line.match(/^\s*\/\/\s*todo[\s:]*?(.*)/i);
+            const match = line.match(/\/\/\s*todo[\s:]*?(.*)/i);
             if (match) {
                 const comment = match[1].trim();
                 if (comment) todos.push(parseTodo(comment, file, lineNumber + 1));
@@ -61,7 +60,7 @@ function extractTodos() {
 function parseTodo(comment, file, lineNumber) {
     const parts = comment.split(';').map(p => p.trim());
     const hasMetadata = parts.length >= 3 && isValidDate(parts[1]);
-    
+
     return {
         file: file.path,
         filename: file.filename,
@@ -74,7 +73,6 @@ function parseTodo(comment, file, lineNumber) {
     };
 }
 
-// ================== Command Handlers ==================
 function showTodos() {
     const todos = extractTodos();
     todos.length > 0 ? printTable(todos) : console.log('No TODOs found.');
@@ -96,7 +94,7 @@ function sortTodos(criteria) {
         user: (a, b) => (a.author || '').localeCompare(b.author || ''),
         date: (a, b) => (b.dateObj || 0) - (a.dateObj || 0)
     };
-    
+
     const sorted = extractTodos().sort(sorters[criteria] || (() => 0));
     sorted.length > 0 ? printTable(sorted) : console.log('No TODOs to sort.');
 }
@@ -104,8 +102,8 @@ function sortTodos(criteria) {
 function showDateTodos(dateStr) {
     const targetDate = parseInputDate(dateStr);
     if (!targetDate) return console.log('Invalid date format. Use YYYY[-MM[-DD]]');
-    
-    const todos = extractTodos().filter(todo => 
+
+    const todos = extractTodos().filter(todo =>
         todo.dateObj && todo.dateObj >= targetDate
     );
     todos.length > 0 ? printTable(todos) : console.log(`No TODOs found after ${dateStr}.`);
@@ -142,10 +140,10 @@ function calculateColumns(todos) {
     };
 
     return ['!', 'user', 'date', 'comment', 'file'].reduce((cols, col) => {
-        const contentLengths = todos.map(todo => 
+        const contentLengths = todos.map(todo =>
             col === '!' ? (todo.important ? 1 : 0)
-            : col === 'file' ? todo.filename.length
-            : todo[col]?.length || 0
+                : col === 'file' ? todo.filename.length
+                    : todo[col]?.length || 0
         );
         cols[col] = Math.min(
             Math.max(...contentLengths, col.length),
@@ -166,7 +164,7 @@ function buildRow(columns, data) {
 function parseInputDate(dateStr) {
     const parts = dateStr.split('-');
     if (!/^\d{4}(-\d{2}(-\d{2})?)?$/.test(dateStr)) return null;
-    
+
     const year = parts[0];
     const month = parts[1] || '01';
     const day = parts[2] || '01';
