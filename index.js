@@ -46,25 +46,24 @@ function processCommand(command) {
 function extractTodos() {
     const todos = [];
     files.forEach(file => {
-        file.content.split('\n').forEach((line, lineNumber) => {
+        file.content.split('\n').forEach((line) => {
             const match = line.match(/\/\/\s*todo[\s:]*?(.*)/i);
             if (match) {
                 const comment = match[1].trim();
-                if (comment) todos.push(parseTodo(comment, file, lineNumber + 1));
+                if (comment) todos.push(parseTodo(comment, file));
             }
         });
     });
     return todos;
 }
 
-function parseTodo(comment, file, lineNumber) {
+function parseTodo(comment, file) {
     const parts = comment.split(';').map(p => p.trim());
     const hasMetadata = parts.length >= 3 && isValidDate(parts[1]);
 
     return {
         file: file.path,
         filename: file.filename,
-        lineNumber: lineNumber,
         author: hasMetadata ? parts[0] : null,
         date: hasMetadata ? parts[1] : null,
         dateObj: hasMetadata ? parseDate(parts[1]) : null,
